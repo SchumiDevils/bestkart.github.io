@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/kart/static/css/main.a1802d01.css",
-    "main.js": "/kart/static/js/main.bef6c04a.js",
-    "static/js/453.0780c55f.chunk.js": "/kart/static/js/453.0780c55f.chunk.js",
-    "index.html": "/kart/index.html",
-    "main.a1802d01.css.map": "/kart/static/css/main.a1802d01.css.map",
-    "main.bef6c04a.js.map": "/kart/static/js/main.bef6c04a.js.map",
-    "453.0780c55f.chunk.js.map": "/kart/static/js/453.0780c55f.chunk.js.map"
+    "main.css": "/bestkart.github.io/static/css/main.a1802d01.css",
+    "main.js": "/bestkart.github.io/static/js/main.c32c3531.js",
+    "static/js/453.0780c55f.chunk.js": "/bestkart.github.io/static/js/453.0780c55f.chunk.js",
+    "index.html": "/bestkart.github.io/index.html",
+    "main.a1802d01.css.map": "/bestkart.github.io/static/css/main.a1802d01.css.map",
+    "main.c32c3531.js.map": "/bestkart.github.io/static/js/main.c32c3531.js.map",
+    "453.0780c55f.chunk.js.map": "/bestkart.github.io/static/js/453.0780c55f.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.a1802d01.css",
-    "static/js/main.bef6c04a.js"
+    "static/js/main.c32c3531.js"
   ]
 }
