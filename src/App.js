@@ -10,8 +10,8 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [logs, setLogs] = useState([]);
   
-  // Servo & Motor State
-  const [servoAngle, setServoAngle] = useState(90);
+  // Servo & Motor State (steering: -90 to +90, center is 0)
+  const [steering, setSteering] = useState(0);
   const [motorSpeed, setMotorSpeed] = useState(0);
   
   // Refs for BLE
@@ -21,15 +21,17 @@ function App() {
   const readBufferRef = useRef('');
   
   // Refs for current values
-  const servoAngleRef = useRef(90);
+  const steeringRef = useRef(0);
   const motorSpeedRef = useRef(0);
   
   // Refs for steering
   const steeringIntervalRef = useRef(null);
+  const steeringDirectionRef = useRef(null);
+  const lastSteeringTimeRef = useRef(0);
 
   useEffect(() => {
-    servoAngleRef.current = servoAngle;
-  }, [servoAngle]);
+    steeringRef.current = steering;
+  }, [steering]);
 
   useEffect(() => {
     motorSpeedRef.current = motorSpeed;
@@ -64,8 +66,11 @@ function App() {
     if (logging) log(data, 'out');
   }, [writeToCharacteristic, log]);
 
+  // Convert steering (-90 to +90) to servo angle (0 to 180) for BLE
   const sendingBLEinfo = useCallback(() => {
-    send(servoAngleRef.current + ";" + motorSpeedRef.current, false);
+    // Map: -90 -> 0°, 0 -> 90°, +90 -> 180°
+    const servoAngle = steeringRef.current + 90;
+    send(servoAngle + ";" + motorSpeedRef.current, false);
   }, [send]);
 
   const receive = useCallback((data) => {
@@ -159,44 +164,79 @@ function App() {
     setIsConnected(false);
   }, [log, handleDisconnection, handleCharacteristicValueChanged]);
 
-  // STEERING with arrow buttons - press and hold (5 degrees, smoother delay)
-  const startSteering = (direction) => {
-    // Move immediately once
-    setServoAngle(prev => {
-      const newAngle = direction === 'left' 
-        ? Math.max(0, prev - 5) 
-        : Math.min(180, prev + 5);
-      return newAngle;
+  // STEERING: -90 to +90, smooth animation
+  const animateSteering = useCallback((timestamp) => {
+    if (!steeringDirectionRef.current) return;
+    
+    // Control speed: move ~150 degrees per second
+    const elapsed = timestamp - lastSteeringTimeRef.current;
+    if (elapsed >= 16) { // ~60fps
+      lastSteeringTimeRef.current = timestamp;
+      
+      const step = 4; // degrees per frame
+      setSteering(prev => {
+        if (steeringDirectionRef.current === 'left') {
+          return Math.max(-90, prev - step);
+        } else {
+          return Math.min(90, prev + step);
+        }
+      });
+    }
+    
+    steeringIntervalRef.current = requestAnimationFrame(animateSteering);
+  }, []);
+
+  const startSteering = (direction, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Stop any existing animation
+    if (steeringIntervalRef.current) {
+      cancelAnimationFrame(steeringIntervalRef.current);
+    }
+    
+    steeringDirectionRef.current = direction;
+    lastSteeringTimeRef.current = performance.now();
+    
+    // Immediate first step
+    setSteering(prev => {
+      if (direction === 'left') {
+        return Math.max(-90, prev - 4);
+      } else {
+        return Math.min(90, prev + 4);
+      }
     });
     
-    // Then continue moving while held (5 degrees every 100ms for smoother steering)
-    steeringIntervalRef.current = setInterval(() => {
-      setServoAngle(prev => {
-        const newAngle = direction === 'left' 
-          ? Math.max(0, prev - 5) 
-          : Math.min(180, prev + 5);
-        return newAngle;
-      });
-    }, 100); // 100ms delay for smoother movement
+    steeringIntervalRef.current = requestAnimationFrame(animateSteering);
   };
 
-  const stopSteering = () => {
+  const stopSteering = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    steeringDirectionRef.current = null;
     if (steeringIntervalRef.current) {
-      clearInterval(steeringIntervalRef.current);
+      cancelAnimationFrame(steeringIntervalRef.current);
       steeringIntervalRef.current = null;
     }
   };
 
-  const centerSteering = () => {
-    setServoAngle(90);
+  const resetSteering = () => {
+    setSteering(0);
   };
 
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (steeringIntervalRef.current) clearInterval(steeringIntervalRef.current);
+      if (steeringIntervalRef.current) cancelAnimationFrame(steeringIntervalRef.current);
     };
   }, []);
+
+  // Format steering display
+  const steeringDisplay = steering > 0 ? `+${steering}` : steering.toString();
 
   return (
     <div className="controller">
@@ -216,16 +256,16 @@ function App() {
         {/* Left Arrow */}
         <button 
           className="arrow-btn left"
-          onTouchStart={() => startSteering('left')}
-          onTouchEnd={stopSteering}
-          onMouseDown={() => startSteering('left')}
-          onMouseUp={stopSteering}
-          onMouseLeave={stopSteering}
+          onPointerDown={(e) => startSteering('left', e)}
+          onPointerUp={stopSteering}
+          onPointerLeave={stopSteering}
+          onPointerCancel={stopSteering}
+          onContextMenu={(e) => e.preventDefault()}
         >
           ◀
         </button>
 
-        {/* Center - Speed Slider */}
+        {/* Center - Speed Slider + Reset */}
         <div className="center-panel">
           <div className="speed-section">
             <div className="slider-container">
@@ -247,19 +287,20 @@ function App() {
             </div>
           </div>
           
-          <button className="center-btn" onClick={centerSteering}>
-            {servoAngle}°
-          </button>
+          <div className="steering-info">
+            <div className="steering-value">{steeringDisplay}</div>
+            <button className="reset-btn" onClick={resetSteering}>↺ 0</button>
+          </div>
         </div>
 
         {/* Right Arrow */}
         <button 
           className="arrow-btn right"
-          onTouchStart={() => startSteering('right')}
-          onTouchEnd={stopSteering}
-          onMouseDown={() => startSteering('right')}
-          onMouseUp={stopSteering}
-          onMouseLeave={stopSteering}
+          onPointerDown={(e) => startSteering('right', e)}
+          onPointerUp={stopSteering}
+          onPointerLeave={stopSteering}
+          onPointerCancel={stopSteering}
+          onContextMenu={(e) => e.preventDefault()}
         >
           ▶
         </button>
@@ -267,10 +308,14 @@ function App() {
 
       {/* Steering Bar */}
       <div className="steering-bar">
-        <div 
-          className="steering-indicator" 
-          style={{ left: `${(servoAngle / 180) * 100}%` }}
-        ></div>
+        <span className="bar-label left">-90</span>
+        <div className="bar-track">
+          <div 
+            className="steering-indicator" 
+            style={{ left: `${((steering + 90) / 180) * 100}%` }}
+          ></div>
+        </div>
+        <span className="bar-label right">+90</span>
       </div>
 
       {/* Terminal */}
