@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/bestkart.github.io/static/css/main.d5b8393c.css",
-    "main.js": "/bestkart.github.io/static/js/main.0810c8e5.js",
+    "main.js": "/bestkart.github.io/static/js/main.77736596.js",
     "static/js/453.0780c55f.chunk.js": "/bestkart.github.io/static/js/453.0780c55f.chunk.js",
     "index.html": "/bestkart.github.io/index.html",
     "main.d5b8393c.css.map": "/bestkart.github.io/static/css/main.d5b8393c.css.map",
-    "main.0810c8e5.js.map": "/bestkart.github.io/static/js/main.0810c8e5.js.map",
+    "main.77736596.js.map": "/bestkart.github.io/static/js/main.77736596.js.map",
     "453.0780c55f.chunk.js.map": "/bestkart.github.io/static/js/453.0780c55f.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.d5b8393c.css",
-    "static/js/main.0810c8e5.js"
+    "static/js/main.77736596.js"
   ]
 }
