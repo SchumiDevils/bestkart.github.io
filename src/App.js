@@ -2,22 +2,16 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import './App.css';
 
 // BLE Service and Characteristic UUIDs
-const BLE_SERVICE_UUID = 0xFFE0;
+const BLE_SERVICE_UUID = 0xFFA0;
 const BLE_CHARACTERISTIC_UUID = 0xFFE1;
 
 function App() {
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
-  const [deviceName, setDeviceName] = useState('');
   const [logs, setLogs] = useState([]);
-  const [inputMessage, setInputMessage] = useState('');
   
-  // Accelerometer State
-  const [operatingSystem, setOperatingSystem] = useState('');
-  const [accelEnabled, setAccelEnabled] = useState(false);
+  // Servo & Motor State
   const [servoAngle, setServoAngle] = useState(90);
-  
-  // Motor State
   const [motorSpeed, setMotorSpeed] = useState(0);
   
   // Refs for BLE
@@ -26,22 +20,13 @@ function App() {
   const intervalRef = useRef(null);
   const readBufferRef = useRef('');
   
-  // Refs for current values (to avoid stale closures in interval)
+  // Refs for current values
   const servoAngleRef = useRef(90);
   const motorSpeedRef = useRef(0);
+  
+  // Refs for steering
+  const steeringIntervalRef = useRef(null);
 
-  // Detect OS on mount
-  useEffect(() => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      setOperatingSystem('iOS');
-    } else if (window.DeviceMotionEvent !== undefined) {
-      setOperatingSystem('Android');
-    } else {
-      setOperatingSystem('other');
-    }
-  }, []);
-
-  // Keep refs in sync with state
   useEffect(() => {
     servoAngleRef.current = servoAngle;
   }, [servoAngle]);
@@ -50,31 +35,23 @@ function App() {
     motorSpeedRef.current = motorSpeed;
   }, [motorSpeed]);
 
-  // Logging function
   const log = useCallback((message, type = '') => {
-    setLogs(prev => [...prev, { message, type, id: Date.now() + Math.random() }]);
+    setLogs(prev => [...prev, { message, type, id: Date.now() + Math.random() }].slice(-20));
   }, []);
 
-  // Write to BLE characteristic
   const writeToCharacteristic = useCallback((characteristic, data) => {
     characteristic.writeValue(new TextEncoder().encode(data));
   }, []);
 
-  // Send data via BLE
   const send = useCallback((data, logging = true) => {
     data = String(data);
-    
-    if (!data || !characteristicCacheRef.current) {
-      return;
-    }
+    if (!data || !characteristicCacheRef.current) return;
     
     data += '\n';
     
     if (data.length > 20) {
       const chunks = data.match(/(.|[\r\n]){1,20}/g);
-      
       writeToCharacteristic(characteristicCacheRef.current, chunks[0]);
-      
       for (let i = 1; i < chunks.length; i++) {
         setTimeout(() => {
           writeToCharacteristic(characteristicCacheRef.current, chunks[i]);
@@ -84,102 +61,72 @@ function App() {
       writeToCharacteristic(characteristicCacheRef.current, data);
     }
     
-    if (logging) {
-      log(data, 'out');
-    }
+    if (logging) log(data, 'out');
   }, [writeToCharacteristic, log]);
 
-  // Send BLE info periodically
   const sendingBLEinfo = useCallback(() => {
-    send(servoAngleRef.current + ";" + motorSpeedRef.current, true);
+    send(servoAngleRef.current + ";" + motorSpeedRef.current, false);
   }, [send]);
 
-  // Handle received data
   const receive = useCallback((data) => {
     log(data, 'in');
   }, [log]);
 
-  // Handle characteristic value changed
   const handleCharacteristicValueChanged = useCallback((event) => {
     const value = new TextDecoder().decode(event.target.value);
-    
     for (const c of value) {
       if (c === '\n') {
         const data = readBufferRef.current.trim();
         readBufferRef.current = '';
-        
-        if (data) {
-          receive(data);
-        }
+        if (data) receive(data);
       } else {
         readBufferRef.current += c;
       }
     }
   }, [receive]);
 
-  // Start notifications
   const startNotifications = useCallback((characteristic) => {
     log('Starting notifications...');
-    
     return characteristic.startNotifications().then(() => {
       log('Notifications started');
       characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
     });
   }, [log, handleCharacteristicValueChanged]);
 
-  // Connect to device and cache characteristic
   const connectDeviceAndCacheCharacteristic = useCallback((device) => {
     if (device.gatt.connected && characteristicCacheRef.current) {
       return Promise.resolve(characteristicCacheRef.current);
     }
-    
-    log('Connecting to GATT server...');
-    
+    log('Connecting...');
     return device.gatt.connect()
-      .then(server => {
-        log('GATT server connected, getting service...');
-        return server.getPrimaryService(BLE_SERVICE_UUID);
-      })
-      .then(service => {
-        log('Service found, getting characteristic...');
-        return service.getCharacteristic(BLE_CHARACTERISTIC_UUID);
-      })
+      .then(server => server.getPrimaryService(BLE_SERVICE_UUID))
+      .then(service => service.getCharacteristic(BLE_CHARACTERISTIC_UUID))
       .then(characteristic => {
-        log('Characteristic found');
+        log('Connected!');
         characteristicCacheRef.current = characteristic;
         return characteristicCacheRef.current;
       });
   }, [log]);
 
-  // Handle disconnection
   const handleDisconnection = useCallback((event) => {
-    const device = event.target;
-    
-    log('"' + device.name + '" bluetooth device disconnected, trying to reconnect...');
-    
-    connectDeviceAndCacheCharacteristic(device)
+    log('Reconnecting...');
+    connectDeviceAndCacheCharacteristic(event.target)
       .then(characteristic => startNotifications(characteristic))
       .catch(error => log(error.toString()));
   }, [log, connectDeviceAndCacheCharacteristic, startNotifications]);
 
-  // Request Bluetooth device
   const requestBluetoothDevice = useCallback(() => {
-    log('Requesting bluetooth device...');
-    
+    log('Searching...');
     return navigator.bluetooth.requestDevice({
       filters: [{ services: [BLE_SERVICE_UUID] }],
     }).then(device => {
-      log('"' + device.name + '" bluetooth device selected');
+      log('Found: ' + device.name);
       deviceCacheRef.current = device;
-      setDeviceName(device.name);
-      
       deviceCacheRef.current.addEventListener('gattserverdisconnected', handleDisconnection);
-      
       return deviceCacheRef.current;
     });
   }, [log, handleDisconnection]);
 
-  // Connect to BLE device
   const connect = useCallback(() => {
     return (deviceCacheRef.current ? Promise.resolve(deviceCacheRef.current) : requestBluetoothDevice())
       .then(device => connectDeviceAndCacheCharacteristic(device))
@@ -191,210 +138,147 @@ function App() {
       .catch(error => log(error.toString()));
   }, [requestBluetoothDevice, connectDeviceAndCacheCharacteristic, startNotifications, sendingBLEinfo, log]);
 
-  // Disconnect from BLE device
   const disconnect = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    
     if (deviceCacheRef.current) {
-      log('Disconnecting from "' + deviceCacheRef.current.name + '" bluetooth device...');
+      log('Disconnecting...');
       deviceCacheRef.current.removeEventListener('gattserverdisconnected', handleDisconnection);
-      
       if (deviceCacheRef.current.gatt.connected) {
         deviceCacheRef.current.gatt.disconnect();
-        log('"' + deviceCacheRef.current.name + '" bluetooth device disconnected');
-      } else {
-        log('"' + deviceCacheRef.current.name + '" bluetooth device is already disconnected');
+        log('Disconnected');
       }
     }
-    
     if (characteristicCacheRef.current) {
       characteristicCacheRef.current.removeEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
       characteristicCacheRef.current = null;
     }
-    
     deviceCacheRef.current = null;
     setIsConnected(false);
-    setDeviceName('');
   }, [log, handleDisconnection, handleCharacteristicValueChanged]);
 
-  // Handle device orientation for servo control
-  const handleDeviceOrientation = useCallback((event) => {
-    const gamma = event.gamma; // Left-right tilt (-90 to 90)
+  // STEERING with arrow buttons - press and hold (5 degrees, smoother delay)
+  const startSteering = (direction) => {
+    // Move immediately once
+    setServoAngle(prev => {
+      const newAngle = direction === 'left' 
+        ? Math.max(0, prev - 5) 
+        : Math.min(180, prev + 5);
+      return newAngle;
+    });
     
-    // Map gamma (-90 to 90) to servo angle (0 to 180)
-    let angle = Math.round(gamma + 90);
-    angle = Math.max(0, Math.min(180, angle));
-    
-    setServoAngle(angle);
-  }, []);
-
-  // Get accelerometer permissions and start
-  const getAccel = useCallback(() => {
-    if (operatingSystem === 'iOS') {
-      DeviceMotionEvent.requestPermission().then(response => {
-        if (response === 'granted') {
-          setAccelEnabled(true);
-          window.addEventListener('deviceorientation', handleDeviceOrientation);
-        }
+    // Then continue moving while held (5 degrees every 100ms for smoother steering)
+    steeringIntervalRef.current = setInterval(() => {
+      setServoAngle(prev => {
+        const newAngle = direction === 'left' 
+          ? Math.max(0, prev - 5) 
+          : Math.min(180, prev + 5);
+        return newAngle;
       });
-    } else if (operatingSystem === 'Android') {
-      setAccelEnabled(true);
-      window.addEventListener('deviceorientation', handleDeviceOrientation);
-    }
-  }, [operatingSystem, handleDeviceOrientation]);
-
-  // Handle form submit
-  const handleSendSubmit = (e) => {
-    e.preventDefault();
-    send(inputMessage);
-    setInputMessage('');
+    }, 100); // 100ms delay for smoother movement
   };
 
-  // Get accelerometer button text
-  const getAccelButtonText = () => {
-    if (operatingSystem === 'iOS') {
-      return 'Get Accelerometer Permissions (iOS: use Bluefy)';
-    } else if (operatingSystem === 'Android') {
-      return 'Use Accelerometer (Android: use Google Chrome)';
-    } else {
-      return 'Use Accelerometer (Not supported on your device)';
+  const stopSteering = () => {
+    if (steeringIntervalRef.current) {
+      clearInterval(steeringIntervalRef.current);
+      steeringIntervalRef.current = null;
     }
   };
 
-  // Cleanup on unmount
+  const centerSteering = () => {
+    setServoAngle(90);
+  };
+
   useEffect(() => {
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (steeringIntervalRef.current) clearInterval(steeringIntervalRef.current);
     };
   }, []);
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>🏎️ Kart Controller</h1>
-        <p className="subtitle">BLE Remote Control with Accelerometer</p>
-      </header>
+    <div className="controller">
+      {/* Header */}
+      <div className="header">
+        <span className="title">🏎️ KART</span>
+        <button 
+          className={`connect-btn ${isConnected ? 'connected' : ''}`}
+          onClick={isConnected ? disconnect : connect}
+        >
+          {isConnected ? '● ON' : '○ OFF'}
+        </button>
+      </div>
 
-      <main className="App-main">
-        {/* Connection Section */}
-        <section className="section connection-section">
-          <h2>Bluetooth Connection</h2>
-          <div className="button-group">
-            <button 
-              className="btn btn-connect" 
-              onClick={connect}
-              disabled={isConnected}
-            >
-              Connect
-            </button>
-            <button 
-              className="btn btn-disconnect" 
-              onClick={disconnect}
-              disabled={!isConnected}
-            >
-              Disconnect
-            </button>
-          </div>
-          <div className="connection-status">
-            <span className={`status-indicator ${isConnected ? 'connected' : ''}`}></span>
-            {isConnected ? `Connected to ${deviceName}` : 'Device not connected'}
-          </div>
-        </section>
+      {/* Main Controls */}
+      <div className="main-controls">
+        {/* Left Arrow */}
+        <button 
+          className="arrow-btn left"
+          onTouchStart={() => startSteering('left')}
+          onTouchEnd={stopSteering}
+          onMouseDown={() => startSteering('left')}
+          onMouseUp={stopSteering}
+          onMouseLeave={stopSteering}
+        >
+          ◀
+        </button>
 
-        {/* Accelerometer Section */}
-        <section className="section accelerometer-section">
-          <h2>Accelerometer Control</h2>
-          <button 
-            className="btn btn-accel"
-            onClick={getAccel}
-            disabled={operatingSystem === 'other' || accelEnabled}
-          >
-            {accelEnabled ? '✓ Accelerometer Active' : getAccelButtonText()}
-          </button>
-          
-          <div className="instructions">
-            <p>📱 iOS: Use <strong>Bluefy</strong> browser</p>
-            <p>🤖 Android: Use <strong>Google Chrome</strong></p>
-          </div>
-        </section>
-
-        {/* Speedometer / Servo Angle Display */}
-        <section className="section speedometer-section">
-          <h2>Servo Angle</h2>
-          <div id="logo">
-            <div className="speedometer">
-              <div className="speed-marks">
-                <span className="mark mark-0">0°</span>
-                <span className="mark mark-90">90°</span>
-                <span className="mark mark-180">180°</span>
+        {/* Center - Speed Slider */}
+        <div className="center-panel">
+          <div className="speed-section">
+            <div className="slider-container">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={motorSpeed}
+                onChange={(e) => setMotorSpeed(parseInt(e.target.value))}
+                className="slider"
+              />
+              <div className="slider-bg">
+                <div className="slider-fill" style={{ height: `${motorSpeed}%` }}></div>
               </div>
             </div>
-            <div 
-              className="needle" 
-              style={{ 
-                transform: `rotate(${servoAngle - 90}deg)`,
-                background: accelEnabled ? '#ff4444' : '#999999'
-              }}
-            ></div>
-          </div>
-          <p className="angle-display">Angle: <strong>{servoAngle}°</strong></p>
-        </section>
-
-        {/* Motor Speed Control */}
-        <section className="section motor-section">
-          <h2>Motor Speed</h2>
-          <div className="motor-control">
-            <input 
-              type="range" 
-              min="0" 
-              max="255" 
-              value={motorSpeed}
-              onChange={(e) => setMotorSpeed(parseInt(e.target.value))}
-              className="speed-slider"
-            />
-            <p className="speed-display">Speed: <strong>{motorSpeed}</strong> / 255</p>
-          </div>
-          <div className="speed-buttons">
-            <button className="btn btn-speed" onClick={() => setMotorSpeed(0)}>Stop</button>
-            <button className="btn btn-speed" onClick={() => setMotorSpeed(64)}>25%</button>
-            <button className="btn btn-speed" onClick={() => setMotorSpeed(128)}>50%</button>
-            <button className="btn btn-speed" onClick={() => setMotorSpeed(192)}>75%</button>
-            <button className="btn btn-speed" onClick={() => setMotorSpeed(255)}>100%</button>
-          </div>
-        </section>
-
-        {/* Terminal Section */}
-        <section className="section terminal-section">
-          <h2>Terminal</h2>
-          <div id="terminal">
-            {logs.map(log => (
-              <div key={log.id} className={log.type}>
-                {log.message}
-              </div>
-            ))}
+            <div className="speed-info">
+              <span className="speed-num">{motorSpeed}%</span>
+              <button className="stop-btn" onClick={() => setMotorSpeed(0)}>STOP</button>
+            </div>
           </div>
           
-          <form id="send-form" onSubmit={handleSendSubmit}>
-            <input 
-              type="text"
-              id="input"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Type a message..."
-            />
-            <button type="submit" className="btn btn-send">Send</button>
-          </form>
-        </section>
-      </main>
+          <button className="center-btn" onClick={centerSteering}>
+            {servoAngle}°
+          </button>
+        </div>
 
-      <footer className="App-footer">
-        <p>Tilt your phone left/right to control the servo • Slide to control motor speed</p>
-      </footer>
+        {/* Right Arrow */}
+        <button 
+          className="arrow-btn right"
+          onTouchStart={() => startSteering('right')}
+          onTouchEnd={stopSteering}
+          onMouseDown={() => startSteering('right')}
+          onMouseUp={stopSteering}
+          onMouseLeave={stopSteering}
+        >
+          ▶
+        </button>
+      </div>
+
+      {/* Steering Bar */}
+      <div className="steering-bar">
+        <div 
+          className="steering-indicator" 
+          style={{ left: `${(servoAngle / 180) * 100}%` }}
+        ></div>
+      </div>
+
+      {/* Terminal */}
+      <div className="terminal">
+        {logs.slice(-3).map(l => (
+          <div key={l.id} className={l.type}>{l.message}</div>
+        ))}
+      </div>
     </div>
   );
 }
