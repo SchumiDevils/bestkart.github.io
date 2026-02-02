@@ -114,10 +114,21 @@ function App() {
   }, [log]);
 
   const handleDisconnection = useCallback((event) => {
+    log('⚠️ Connection lost!');
+    
+    // SAFETY: Immediately reset UI to safe state when connection lost
+    setSteering(0);
+    setMotorSpeed(0);
+    log('⚠️ Safety: Wheels straight, speed 0');
+    
+    // Try to reconnect
     log('Reconnecting...');
     connectDeviceAndCacheCharacteristic(event.target)
       .then(characteristic => startNotifications(characteristic))
-      .catch(error => log(error.toString()));
+      .catch(error => {
+        log(error.toString());
+        setIsConnected(false);
+      });
   }, [log, connectDeviceAndCacheCharacteristic, startNotifications]);
 
   const requestBluetoothDevice = useCallback(() => {
@@ -143,11 +154,31 @@ function App() {
       .catch(error => log(error.toString()));
   }, [requestBluetoothDevice, connectDeviceAndCacheCharacteristic, startNotifications, sendingBLEinfo, log]);
 
+  // SAFETY: Reset to safe state (wheels straight, speed 0)
+  const resetToSafeState = useCallback(() => {
+    setSteering(0);
+    setMotorSpeed(0);
+    log('⚠️ Safety: Reset to safe state');
+  }, [log]);
+
   const disconnect = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    
+    // SAFETY: Try to send safe state before disconnecting
+    if (characteristicCacheRef.current && deviceCacheRef.current?.gatt?.connected) {
+      try {
+        // Send steering=90 (center) and speed=0
+        const safeData = '90;0\n';
+        characteristicCacheRef.current.writeValue(new TextEncoder().encode(safeData));
+        log('⚠️ Sent safe state before disconnect');
+      } catch (e) {
+        // Ignore errors, we're disconnecting anyway
+      }
+    }
+    
     if (deviceCacheRef.current) {
       log('Disconnecting...');
       deviceCacheRef.current.removeEventListener('gattserverdisconnected', handleDisconnection);
@@ -162,7 +193,10 @@ function App() {
     }
     deviceCacheRef.current = null;
     setIsConnected(false);
-  }, [log, handleDisconnection, handleCharacteristicValueChanged]);
+    
+    // SAFETY: Reset UI to safe state
+    resetToSafeState();
+  }, [log, handleDisconnection, handleCharacteristicValueChanged, resetToSafeState]);
 
   // STEERING: -90 to +90, smooth animation
   const animateSteering = useCallback((timestamp) => {

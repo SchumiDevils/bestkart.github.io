@@ -9,7 +9,10 @@
   touch-action: manipulation;
 }
 
-html {
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: #0a0a0f;
 }
 
@@ -31,17 +34,17 @@ body {
   font-family: 'Orbitron', sans-serif;
   background: #0a0a0f;
   color: white;
-  overflow: hidden;
 }
 
 .controller {
   display: flex;
   flex-direction: column;
-  width: 100vw;
-  height: 100vh;
-  padding: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
   background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2f 100%);
-  gap: 10px;
+  gap: 6px;
+  overflow: hidden;
 }
 
 /* HEADER */
@@ -49,11 +52,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 5px;
+  flex-shrink: 0;
 }
 
 .title {
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 900;
   background: linear-gradient(90deg, #0f0, #0ff);
   -webkit-background-clip: text;
@@ -61,15 +65,16 @@ body {
 }
 
 .connect-btn {
-  padding: 8px 16px;
+  padding: 10px 20px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
   border: 2px solid #0cf;
   background: transparent;
   color: #0cf;
   border-radius: 20px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .connect-btn.connected {
@@ -86,44 +91,42 @@ body {
 .main-controls {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 15px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 5px;
+  min-height: 0;
 }
 
 /* ARROW BUTTONS */
 .arrow-btn {
-  width: 90px;
-  height: 100%;
-  max-height: 150px;
-  touch-action: none; /* Prevent browser touch behaviors */
-  -webkit-touch-callout: none; /* Prevent callout on long press */
-  font-size: 2.5rem;
+  width: 70px;
+  flex-shrink: 0;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  font-size: 2rem;
   border: none;
-  border-radius: 16px;
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s;
 }
 
 .arrow-btn.left {
   background: linear-gradient(135deg, #0cf, #06a);
   color: white;
-  box-shadow: 0 4px 20px rgba(0, 204, 255, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 204, 255, 0.3);
 }
 
 .arrow-btn.right {
   background: linear-gradient(135deg, #0cf, #06a);
   color: white;
-  box-shadow: 0 4px 20px rgba(0, 204, 255, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 204, 255, 0.3);
 }
 
 .arrow-btn:active {
-  transform: scale(0.9);
-  box-shadow: 0 2px 10px rgba(0, 204, 255, 0.5);
+  transform: scale(0.95);
 }
 
 /* CENTER PANEL */
@@ -132,20 +135,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 25px;
-  height: 100%;
+  gap: 15px;
+  min-width: 0;
 }
 
 .speed-section {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   height: 100%;
-  max-height: 150px;
 }
 
 .slider-container {
-  width: 40px;
+  width: 35px;
   height: 100%;
   position: relative;
 }
@@ -164,18 +166,18 @@ body {
 
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 36px;
-  height: 22px;
+  width: 32px;
+  height: 20px;
   background: linear-gradient(135deg, #f80, #f50);
-  border-radius: 6px;
-  box-shadow: 0 0 12px rgba(255,136,0,0.5);
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(255,136,0,0.5);
 }
 
 .slider::-moz-range-thumb {
-  width: 36px;
-  height: 22px;
+  width: 32px;
+  height: 20px;
   background: linear-gradient(135deg, #f80, #f50);
-  border-radius: 6px;
+  border-radius: 5px;
   border: none;
 }
 
@@ -184,10 +186,10 @@ body {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 20px;
+  width: 16px;
   height: 100%;
   background: #050508;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 2px solid #333;
   overflow: hidden;
 }
@@ -197,33 +199,32 @@ body {
   bottom: 0;
   width: 100%;
   background: linear-gradient(to top, #f80, #f33);
-  transition: height 0.1s;
 }
 
 .speed-info {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .speed-num {
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   font-weight: 900;
   color: #f80;
 }
 
 .stop-btn {
-  padding: 15px 20px;
+  padding: 10px 14px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.9rem;
+  font-size: 0.7rem;
   font-weight: 700;
   background: #f33;
   color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(255, 50, 50, 0.4);
+  box-shadow: 0 3px 10px rgba(255, 50, 50, 0.4);
 }
 
 .stop-btn:active {
@@ -235,31 +236,30 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .steering-value {
-  font-size: 1.8rem;
+  font-size: 1.4rem;
   font-weight: 900;
   color: #0ff;
-  min-width: 60px;
+  min-width: 50px;
   text-align: center;
 }
 
 .reset-btn {
-  padding: 10px 16px;
+  padding: 8px 12px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-weight: 700;
   background: transparent;
   color: #0f0;
   border: 2px solid #0f0;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
 .reset-btn:active {
-  transform: scale(0.95);
   background: #0f0;
   color: #000;
 }
@@ -268,14 +268,15 @@ body {
 .steering-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 5px;
+  flex-shrink: 0;
 }
 
 .bar-label {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   color: #666;
-  min-width: 30px;
+  min-width: 25px;
 }
 
 .bar-label.right {
@@ -284,9 +285,9 @@ body {
 
 .bar-track {
   flex: 1;
-  height: 14px;
+  height: 12px;
   background: #151520;
-  border-radius: 7px;
+  border-radius: 6px;
   position: relative;
   border: 1px solid #333;
 }
@@ -294,25 +295,26 @@ body {
 .steering-indicator {
   position: absolute;
   top: 50%;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   background: linear-gradient(135deg, #0ff, #0f0);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 12px #0ff;
-  /* No transition - using requestAnimationFrame for smooth updates */
+  box-shadow: 0 0 10px #0ff;
 }
 
 /* TERMINAL */
 .terminal {
   background: #050508;
   border: 1px solid #222;
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 4px;
+  padding: 4px 8px;
   font-family: monospace;
-  font-size: 0.55rem;
-  min-height: 40px;
-  margin: 0 10px;
+  font-size: 0.5rem;
+  min-height: 30px;
+  max-height: 40px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .terminal div {
@@ -320,7 +322,38 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .terminal div.out { color: #f80; }
 .terminal div.in { color: #0cf; }
+
+/* Extra small screens */
+@media (max-height: 400px) {
+  .controller {
+    padding: 5px;
+    gap: 4px;
+  }
+  
+  .title {
+    font-size: 0.9rem;
+  }
+  
+  .connect-btn {
+    padding: 8px 14px;
+    font-size: 0.7rem;
+  }
+  
+  .arrow-btn {
+    width: 60px;
+    font-size: 1.6rem;
+  }
+  
+  .steering-value {
+    font-size: 1.2rem;
+  }
+  
+  .terminal {
+    display: none;
+  }
+}
