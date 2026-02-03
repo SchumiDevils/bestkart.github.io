@@ -6,6 +6,10 @@ const BLE_SERVICE_UUID = 0xFFA0;
 const BLE_CHARACTERISTIC_UUID = 0xFFE1;
 
 function App() {
+  // Control Mode: null = selection screen, 'buttons' or 'controller'
+  const [controlMode, setControlMode] = useState(null);
+  const [gamepadConnected, setGamepadConnected] = useState(false);
+  
   // BLE State
   const [isConnected, setIsConnected] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -13,6 +17,7 @@ function App() {
   // Servo & Motor State (steering: -90 to +90, center is 0)
   const [steering, setSteering] = useState(0);
   const [motorSpeed, setMotorSpeed] = useState(0);
+  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
   
   // Refs for BLE
   const deviceCacheRef = useRef(null);
@@ -23,11 +28,17 @@ function App() {
   // Refs for current values
   const steeringRef = useRef(0);
   const motorSpeedRef = useRef(0);
+  const directionRef = useRef(1);
   
-  // Refs for steering
+  // Refs for steering (button mode)
   const steeringIntervalRef = useRef(null);
   const steeringDirectionRef = useRef(null);
   const lastSteeringTimeRef = useRef(0);
+  
+  // Refs for gamepad
+  const gamepadLoopRef = useRef(null);
+  const smoothedSteeringRef = useRef(0);
+  const lastGamepadTimeRef = useRef(0);
 
   useEffect(() => {
     steeringRef.current = steering;
@@ -36,6 +47,10 @@ function App() {
   useEffect(() => {
     motorSpeedRef.current = motorSpeed;
   }, [motorSpeed]);
+
+  useEffect(() => {
+    directionRef.current = direction;
+  }, [direction]);
 
   const log = useCallback((message, type = '') => {
     setLogs(prev => [...prev, { message, type, id: Date.now() + Math.random() }].slice(-20));
@@ -67,10 +82,10 @@ function App() {
   }, [writeToCharacteristic, log]);
 
   // Convert steering (-90 to +90) to servo angle (0 to 180) for BLE
+  // Format: angle;speed;direction
   const sendingBLEinfo = useCallback(() => {
-    // Map: -90 -> 0°, 0 -> 90°, +90 -> 180°
     const servoAngle = steeringRef.current + 90;
-    send(servoAngle + ";" + motorSpeedRef.current, false);
+    send(servoAngle + ";" + motorSpeedRef.current + ";" + directionRef.current, false);
   }, [send]);
 
   const receive = useCallback((data) => {
@@ -115,13 +130,11 @@ function App() {
 
   const handleDisconnection = useCallback((event) => {
     log('⚠️ Connection lost!');
-    
-    // SAFETY: Immediately reset UI to safe state when connection lost
     setSteering(0);
     setMotorSpeed(0);
+    setDirection(1);
     log('⚠️ Safety: Wheels straight, speed 0');
     
-    // Try to reconnect
     log('Reconnecting...');
     connectDeviceAndCacheCharacteristic(event.target)
       .then(characteristic => startNotifications(characteristic))
@@ -154,10 +167,10 @@ function App() {
       .catch(error => log(error.toString()));
   }, [requestBluetoothDevice, connectDeviceAndCacheCharacteristic, startNotifications, sendingBLEinfo, log]);
 
-  // SAFETY: Reset to safe state (wheels straight, speed 0)
   const resetToSafeState = useCallback(() => {
     setSteering(0);
     setMotorSpeed(0);
+    setDirection(1);
     log('⚠️ Safety: Reset to safe state');
   }, [log]);
 
@@ -167,16 +180,12 @@ function App() {
       intervalRef.current = null;
     }
     
-    // SAFETY: Try to send safe state before disconnecting
     if (characteristicCacheRef.current && deviceCacheRef.current?.gatt?.connected) {
       try {
-        // Send steering=90 (center) and speed=0
-        const safeData = '90;0\n';
+        const safeData = '90;0;1\n';
         characteristicCacheRef.current.writeValue(new TextEncoder().encode(safeData));
         log('⚠️ Sent safe state before disconnect');
-      } catch (e) {
-        // Ignore errors, we're disconnecting anyway
-      }
+      } catch (e) {}
     }
     
     if (deviceCacheRef.current) {
@@ -193,21 +202,17 @@ function App() {
     }
     deviceCacheRef.current = null;
     setIsConnected(false);
-    
-    // SAFETY: Reset UI to safe state
     resetToSafeState();
   }, [log, handleDisconnection, handleCharacteristicValueChanged, resetToSafeState]);
 
-  // STEERING: -90 to +90, smooth animation
+  // ============ BUTTON MODE STEERING ============
   const animateSteering = useCallback((timestamp) => {
     if (!steeringDirectionRef.current) return;
     
-    // Control speed: move ~150 degrees per second
     const elapsed = timestamp - lastSteeringTimeRef.current;
-    if (elapsed >= 16) { // ~60fps
+    if (elapsed >= 16) {
       lastSteeringTimeRef.current = timestamp;
-      
-      const step = 4; // degrees per frame
+      const step = 4;
       setSteering(prev => {
         if (steeringDirectionRef.current === 'left') {
           return Math.max(-90, prev - step);
@@ -216,41 +221,20 @@ function App() {
         }
       });
     }
-    
     steeringIntervalRef.current = requestAnimationFrame(animateSteering);
   }, []);
 
   const startSteering = (direction, e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Stop any existing animation
-    if (steeringIntervalRef.current) {
-      cancelAnimationFrame(steeringIntervalRef.current);
-    }
-    
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (steeringIntervalRef.current) cancelAnimationFrame(steeringIntervalRef.current);
     steeringDirectionRef.current = direction;
     lastSteeringTimeRef.current = performance.now();
-    
-    // Immediate first step
-    setSteering(prev => {
-      if (direction === 'left') {
-        return Math.max(-90, prev - 4);
-      } else {
-        return Math.min(90, prev + 4);
-      }
-    });
-    
+    setSteering(prev => direction === 'left' ? Math.max(-90, prev - 4) : Math.min(90, prev + 4));
     steeringIntervalRef.current = requestAnimationFrame(animateSteering);
   };
 
   const stopSteering = (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     steeringDirectionRef.current = null;
     if (steeringIntervalRef.current) {
       cancelAnimationFrame(steeringIntervalRef.current);
@@ -258,24 +242,210 @@ function App() {
     }
   };
 
-  const resetSteering = () => {
-    setSteering(0);
-  };
+  const resetSteering = () => setSteering(0);
 
+  // ============ GAMEPAD / CONTROLLER MODE ============
+  const gamepadLoop = useCallback((timestamp) => {
+    // Time-based smoothing
+    const deltaTime = timestamp - lastGamepadTimeRef.current;
+    lastGamepadTimeRef.current = timestamp;
+    
+    const gamepads = navigator.getGamepads();
+    const gp = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
+    
+    if (gp) {
+      if (!gamepadConnected) setGamepadConnected(true);
+      
+      // Left stick X-axis for steering (axis 0)
+      // Value is -1 (left) to 1 (right)
+      const stickX = gp.axes[0];
+      // Apply deadzone
+      const deadzone = 0.1;
+      let targetSteering = 0;
+      if (Math.abs(stickX) > deadzone) {
+        targetSteering = stickX * 90;
+      }
+      
+      // Time-based smooth interpolation
+      // smoothSpeed = how many degrees per second to change (higher = faster response)
+      const smoothSpeed = 300; // degrees per second
+      const maxChange = (smoothSpeed * deltaTime) / 1000;
+      const diff = targetSteering - smoothedSteeringRef.current;
+      
+      if (Math.abs(diff) <= maxChange) {
+        smoothedSteeringRef.current = targetSteering;
+      } else {
+        smoothedSteeringRef.current += Math.sign(diff) * maxChange;
+      }
+      
+      setSteering(Math.round(smoothedSteeringRef.current));
+      
+      // R2 for forward, L2 for backward
+      // PS5: R2 = button 7, L2 = button 6
+      let r2Value = 0;
+      let l2Value = 0;
+      
+      // R2 (forward) - button 7
+      if (gp.buttons[7] && gp.buttons[7].value > 0) {
+        r2Value = Math.round(gp.buttons[7].value * 100);
+      }
+      // L2 (backward) - button 6
+      if (gp.buttons[6] && gp.buttons[6].value > 0) {
+        l2Value = Math.round(gp.buttons[6].value * 100);
+      }
+      
+      // R2 = forward (1), L2 = backward (-1)
+      if (r2Value > l2Value) {
+        setMotorSpeed(r2Value);
+        setDirection(1);
+      } else if (l2Value > r2Value) {
+        setMotorSpeed(l2Value);
+        setDirection(-1);
+      } else {
+        setMotorSpeed(0);
+      }
+    } else {
+      if (gamepadConnected) setGamepadConnected(false);
+    }
+    
+    gamepadLoopRef.current = requestAnimationFrame(gamepadLoop);
+  }, [gamepadConnected]);
+
+  // Start/stop gamepad loop based on control mode
+  useEffect(() => {
+    if (controlMode === 'controller') {
+      lastGamepadTimeRef.current = performance.now();
+      gamepadLoopRef.current = requestAnimationFrame(gamepadLoop);
+      log('🎮 Controller mode active');
+    }
+    
+    return () => {
+      if (gamepadLoopRef.current) {
+        cancelAnimationFrame(gamepadLoopRef.current);
+      }
+    };
+  }, [controlMode, gamepadLoop, log]);
+
+  // Gamepad connect/disconnect events
+  useEffect(() => {
+    const handleGamepadConnected = (e) => {
+      log('🎮 Controller connected: ' + e.gamepad.id);
+      setGamepadConnected(true);
+    };
+    
+    const handleGamepadDisconnected = () => {
+      log('🎮 Controller disconnected');
+      setGamepadConnected(false);
+      // Safety: reset when controller disconnects
+      setSteering(0);
+      setMotorSpeed(0);
+      setDirection(1);
+    };
+    
+    window.addEventListener('gamepadconnected', handleGamepadConnected);
+    window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
+    
+    return () => {
+      window.removeEventListener('gamepadconnected', handleGamepadConnected);
+      window.removeEventListener('gamepaddisconnected', handleGamepadDisconnected);
+    };
+  }, [log]);
+
+  // Cleanup
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (steeringIntervalRef.current) cancelAnimationFrame(steeringIntervalRef.current);
+      if (gamepadLoopRef.current) cancelAnimationFrame(gamepadLoopRef.current);
     };
   }, []);
 
-  // Format steering display
   const steeringDisplay = steering > 0 ? `+${steering}` : steering.toString();
 
+  // ============ SELECTION SCREEN ============
+  if (controlMode === null) {
+    return (
+      <div className="selection-screen">
+        <h1>🏎️ KART CONTROLLER</h1>
+        <p>Choose your control method:</p>
+        <div className="selection-buttons">
+          <button className="select-btn buttons" onClick={() => setControlMode('buttons')}>
+            <span className="select-icon">📱</span>
+            <span className="select-text">TOUCH BUTTONS</span>
+            <span className="select-desc">Use on-screen arrows</span>
+          </button>
+          <button className="select-btn controller" onClick={() => setControlMode('controller')}>
+            <span className="select-icon">🎮</span>
+            <span className="select-text">PS5 CONTROLLER</span>
+            <span className="select-desc">Stick + R2 fwd / L2 rev</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ CONTROLLER MODE UI ============
+  if (controlMode === 'controller') {
+    return (
+      <div className="controller gamepad-mode">
+        <div className="header">
+          <button className="back-btn" onClick={() => setControlMode(null)}>← Back</button>
+          <span className="title">🎮 CONTROLLER</span>
+          <button 
+            className={`connect-btn ${isConnected ? 'connected' : ''}`}
+            onClick={isConnected ? disconnect : connect}
+          >
+            {isConnected ? '● ON' : '○ OFF'}
+          </button>
+        </div>
+
+        <div className="gamepad-display">
+          <div className="gamepad-status">
+            {gamepadConnected ? (
+              <span className="gp-connected">🎮 Controller Connected</span>
+            ) : (
+              <span className="gp-disconnected">🎮 Press any button on controller...</span>
+            )}
+          </div>
+          
+          <div className="gamepad-values">
+            <div className="gp-value">
+              <span className="gp-label">STEERING</span>
+              <span className="gp-num">{steeringDisplay}</span>
+            </div>
+            <div className="gp-value">
+              <span className="gp-label">{direction === 1 ? 'FWD (R2)' : 'REV (L2)'}</span>
+              <span className={`gp-num speed ${direction === -1 ? 'reverse' : ''}`}>{motorSpeed}%</span>
+            </div>
+          </div>
+          
+          <div className="steering-bar">
+            <span className="bar-label">-90</span>
+            <div className="bar-track">
+              <div className="steering-indicator" style={{ left: `${((steering + 90) / 180) * 100}%` }}></div>
+            </div>
+            <span className="bar-label">+90</span>
+          </div>
+          
+          <div className="speed-bar">
+            <div className="speed-bar-fill" style={{ width: `${motorSpeed}%` }}></div>
+          </div>
+        </div>
+
+        <div className="terminal">
+          {logs.slice(-4).map(l => (
+            <div key={l.id} className={l.type}>{l.message}</div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ============ BUTTON MODE UI ============
   return (
     <div className="controller">
-      {/* Header */}
       <div className="header">
+        <button className="back-btn" onClick={() => setControlMode(null)}>← Back</button>
         <span className="title">🏎️ KART</span>
         <button 
           className={`connect-btn ${isConnected ? 'connected' : ''}`}
@@ -285,29 +455,25 @@ function App() {
         </button>
       </div>
 
-      {/* Main Controls */}
       <div className="main-controls">
-        {/* Left Arrow */}
         <button 
           className="arrow-btn left"
-          onPointerDown={(e) => startSteering('left', e)}
-          onPointerUp={stopSteering}
-          onPointerLeave={stopSteering}
-          onPointerCancel={stopSteering}
+          onTouchStart={(e) => startSteering('left', e)}
+          onTouchEnd={stopSteering}
+          onTouchCancel={stopSteering}
+          onMouseDown={(e) => startSteering('left', e)}
+          onMouseUp={stopSteering}
+          onMouseLeave={stopSteering}
           onContextMenu={(e) => e.preventDefault()}
         >
           ◀
         </button>
 
-        {/* Center - Speed Slider + Reset */}
         <div className="center-panel">
           <div className="speed-section">
             <div className="slider-container">
               <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={motorSpeed}
+                type="range" min="0" max="100" value={motorSpeed}
                 onChange={(e) => setMotorSpeed(parseInt(e.target.value))}
                 className="slider"
               />
@@ -317,6 +483,12 @@ function App() {
             </div>
             <div className="speed-info">
               <span className="speed-num">{motorSpeed}%</span>
+              <button 
+                className={`dir-btn ${direction === -1 ? 'reverse' : ''}`} 
+                onClick={() => setDirection(d => d === 1 ? -1 : 1)}
+              >
+                {direction === 1 ? '⬆ FWD' : '⬇ REV'}
+              </button>
               <button className="stop-btn" onClick={() => setMotorSpeed(0)}>STOP</button>
             </div>
           </div>
@@ -327,32 +499,28 @@ function App() {
           </div>
         </div>
 
-        {/* Right Arrow */}
         <button 
           className="arrow-btn right"
-          onPointerDown={(e) => startSteering('right', e)}
-          onPointerUp={stopSteering}
-          onPointerLeave={stopSteering}
-          onPointerCancel={stopSteering}
+          onTouchStart={(e) => startSteering('right', e)}
+          onTouchEnd={stopSteering}
+          onTouchCancel={stopSteering}
+          onMouseDown={(e) => startSteering('right', e)}
+          onMouseUp={stopSteering}
+          onMouseLeave={stopSteering}
           onContextMenu={(e) => e.preventDefault()}
         >
           ▶
         </button>
       </div>
 
-      {/* Steering Bar */}
       <div className="steering-bar">
         <span className="bar-label left">-90</span>
         <div className="bar-track">
-          <div 
-            className="steering-indicator" 
-            style={{ left: `${((steering + 90) / 180) * 100}%` }}
-          ></div>
+          <div className="steering-indicator" style={{ left: `${((steering + 90) / 180) * 100}%` }}></div>
         </div>
         <span className="bar-label right">+90</span>
       </div>
 
-      {/* Terminal */}
       <div className="terminal">
         {logs.slice(-3).map(l => (
           <div key={l.id} className={l.type}>{l.message}</div>

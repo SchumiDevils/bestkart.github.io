@@ -231,6 +231,27 @@ body {
   transform: scale(0.95);
 }
 
+/* DIRECTION BUTTON */
+.dir-btn {
+  padding: 8px 12px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: #0a0;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dir-btn.reverse {
+  background: #a0a;
+}
+
+.dir-btn:active {
+  transform: scale(0.95);
+}
+
 /* STEERING INFO */
 .steering-info {
   display: flex;
@@ -356,4 +377,210 @@ body {
   .terminal {
     display: none;
   }
+}
+
+/* ============================================
+   SELECTION SCREEN
+   ============================================ */
+.selection-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2f 100%);
+  padding: 20px;
+  gap: 20px;
+}
+
+.selection-screen h1 {
+  font-size: 1.8rem;
+  font-weight: 900;
+  background: linear-gradient(90deg, #0f0, #0ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+}
+
+.selection-screen p {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.selection-buttons {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.select-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 25px 35px;
+  border: 3px solid;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.select-btn.buttons {
+  border-color: #0cf;
+}
+
+.select-btn.controller {
+  border-color: #f80;
+}
+
+.select-btn:hover {
+  transform: scale(1.05);
+}
+
+.select-btn:active {
+  transform: scale(0.98);
+}
+
+.select-btn.buttons:hover {
+  background: rgba(0, 204, 255, 0.1);
+  box-shadow: 0 0 30px rgba(0, 204, 255, 0.3);
+}
+
+.select-btn.controller:hover {
+  background: rgba(255, 136, 0, 0.1);
+  box-shadow: 0 0 30px rgba(255, 136, 0, 0.3);
+}
+
+.select-icon {
+  font-size: 3rem;
+}
+
+.select-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+}
+
+.select-btn.buttons .select-text { color: #0cf; }
+.select-btn.controller .select-text { color: #f80; }
+
+.select-desc {
+  font-size: 0.7rem;
+  color: #666;
+}
+
+/* ============================================
+   BACK BUTTON
+   ============================================ */
+.back-btn {
+  padding: 8px 12px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: transparent;
+  color: #888;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.back-btn:hover {
+  color: #fff;
+  border-color: #888;
+}
+
+/* ============================================
+   GAMEPAD / CONTROLLER MODE
+   ============================================ */
+.gamepad-mode {
+  background: linear-gradient(135deg, #0a0a0f 0%, #2a1a0f 100%);
+}
+
+.gamepad-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 10px;
+}
+
+.gamepad-status {
+  font-size: 0.9rem;
+}
+
+.gp-connected {
+  color: #0f0;
+}
+
+.gp-disconnected {
+  color: #f80;
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.gamepad-values {
+  display: flex;
+  gap: 40px;
+}
+
+.gp-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.gp-label {
+  font-size: 0.7rem;
+  color: #888;
+}
+
+.gp-num {
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #0ff;
+}
+
+.gp-num.speed {
+  color: #0a0;
+}
+
+.gp-num.speed.reverse {
+  color: #a0a;
+}
+
+.gamepad-mode .steering-bar {
+  width: 100%;
+  max-width: 400px;
+}
+
+.speed-bar {
+  width: 100%;
+  max-width: 400px;
+  height: 20px;
+  background: #151520;
+  border-radius: 10px;
+  border: 1px solid #333;
+  overflow: hidden;
+}
+
+.speed-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f50, #f80);
+  transition: width 0.05s;
+  border-radius: 10px;
+}
+
+.gamepad-mode .terminal {
+  max-height: 60px;
 }
