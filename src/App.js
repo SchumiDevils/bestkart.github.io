@@ -17,7 +17,7 @@ function App() {
   // Servo & Motor State (steering: -90 to +90, center is 0)
   const [steering, setSteering] = useState(0);
   const [motorSpeed, setMotorSpeed] = useState(0);
-  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
+  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward, 0 = brake
   
   // Refs for BLE
   const deviceCacheRef = useRef(null);
@@ -39,6 +39,18 @@ function App() {
   const gamepadLoopRef = useRef(null);
   const smoothedSteeringRef = useRef(0);
   const lastGamepadTimeRef = useRef(0);
+  
+  // Refs for virtual joystick (combined steering + throttle)
+  const joystickBaseRef = useRef(null);
+  const joystickKnobRef = useRef(null);
+  const joystickActiveRef = useRef(false);
+  const joystickCenterRef = useRef({ x: 0, y: 0 });
+  
+  // Accelerometer state
+  const [accelEnabled, setAccelEnabled] = useState(false);
+  const [accelSupported, setAccelSupported] = useState(true);
+  const [accelThrottle, setAccelThrottle] = useState(0);
+  const smoothedAccelRef = useRef(0);
 
   useEffect(() => {
     steeringRef.current = steering;
@@ -82,10 +94,12 @@ function App() {
   }, [writeToCharacteristic, log]);
 
   // Convert steering (-90 to +90) to servo angle (0 to 180) for BLE
-  // Format: angle;speed;direction
+  // Format: angle;speed;direction (direction: 1=forward, -1=backward, 0=brake)
   const sendingBLEinfo = useCallback(() => {
     const servoAngle = steeringRef.current + 90;
-    send(servoAngle + ";" + motorSpeedRef.current + ";" + directionRef.current, false);
+    // Send direction 0 when speed is 0 (braking)
+    const dir = motorSpeedRef.current === 0 ? 0 : directionRef.current;
+    send(servoAngle + ";" + motorSpeedRef.current + ";" + dir, false);
   }, [send]);
 
   const receive = useCallback((data) => {
@@ -182,9 +196,9 @@ function App() {
     
     if (characteristicCacheRef.current && deviceCacheRef.current?.gatt?.connected) {
       try {
-        const safeData = '90;0;1\n';
+        const safeData = '90;0;0\n'; // direction 0 = brake
         characteristicCacheRef.current.writeValue(new TextEncoder().encode(safeData));
-        log('⚠️ Sent safe state before disconnect');
+        log('⚠️ Sent brake state before disconnect');
       } catch (e) {}
     }
     
@@ -244,6 +258,98 @@ function App() {
 
   const resetSteering = () => setSteering(0);
 
+  // ============ VIRTUAL JOYSTICK MODE (Combined Steering + Throttle) ============
+  const handleJoystickStart = useCallback((e) => {
+    e.preventDefault();
+    joystickActiveRef.current = true;
+    const rect = joystickBaseRef.current.getBoundingClientRect();
+    joystickCenterRef.current = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+    handleJoystickMove(e);
+  }, []);
+
+  const handleJoystickMove = useCallback((e) => {
+    if (!joystickActiveRef.current) return;
+    e.preventDefault();
+    
+    const touch = e.touches ? e.touches[0] : e;
+    const rect = joystickBaseRef.current.getBoundingClientRect();
+    const maxRadius = rect.width / 2 - 30;
+    
+    let deltaX = touch.clientX - joystickCenterRef.current.x;
+    let deltaY = touch.clientY - joystickCenterRef.current.y;
+    
+    // Limit to circle
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    if (distance > maxRadius) {
+      deltaX = (deltaX / distance) * maxRadius;
+      deltaY = (deltaY / distance) * maxRadius;
+    }
+    
+    // Update knob position
+    if (joystickKnobRef.current) {
+      joystickKnobRef.current.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
+    }
+    
+    // Map X to steering (-90 to +90)
+    const steerValue = Math.round((deltaX / maxRadius) * 90);
+    setSteering(steerValue);
+    
+    // Map Y to throttle (up = forward, down = backward)
+    const throttleValue = Math.round((-deltaY / maxRadius) * 100);
+    
+    if (throttleValue > 5) { // Small deadzone
+      setMotorSpeed(throttleValue);
+      setDirection(1);
+    } else if (throttleValue < -5) {
+      setMotorSpeed(Math.abs(throttleValue));
+      setDirection(-1);
+    } else {
+      setMotorSpeed(0);
+      setDirection(0);
+    }
+  }, []);
+
+  const handleJoystickEnd = useCallback((e) => {
+    if (e) e.preventDefault();
+    joystickActiveRef.current = false;
+    if (joystickKnobRef.current) {
+      joystickKnobRef.current.style.transform = 'translate(-50%, -50%)';
+    }
+    setSteering(0);
+    setMotorSpeed(0);
+    setDirection(0);
+  }, []);
+
+  // Global touch/mouse move and end handlers for joystick
+  useEffect(() => {
+    if (controlMode !== 'joystick') return;
+    
+    const handleGlobalMove = (e) => {
+      if (joystickActiveRef.current) handleJoystickMove(e);
+    };
+    
+    const handleGlobalEnd = (e) => {
+      if (joystickActiveRef.current) handleJoystickEnd(e);
+    };
+    
+    window.addEventListener('touchmove', handleGlobalMove, { passive: false });
+    window.addEventListener('touchend', handleGlobalEnd);
+    window.addEventListener('touchcancel', handleGlobalEnd);
+    window.addEventListener('mousemove', handleGlobalMove);
+    window.addEventListener('mouseup', handleGlobalEnd);
+    
+    return () => {
+      window.removeEventListener('touchmove', handleGlobalMove);
+      window.removeEventListener('touchend', handleGlobalEnd);
+      window.removeEventListener('touchcancel', handleGlobalEnd);
+      window.removeEventListener('mousemove', handleGlobalMove);
+      window.removeEventListener('mouseup', handleGlobalEnd);
+    };
+  }, [controlMode, handleJoystickMove, handleJoystickEnd]);
+
   // ============ GAMEPAD / CONTROLLER MODE ============
   const gamepadLoop = useCallback((timestamp) => {
     // Time-based smoothing
@@ -294,7 +400,7 @@ function App() {
         l2Value = Math.round(gp.buttons[6].value * 100);
       }
       
-      // R2 = forward (1), L2 = backward (-1)
+      // R2 = forward (1), L2 = backward (-1), neither = brake (0)
       if (r2Value > l2Value) {
         setMotorSpeed(r2Value);
         setDirection(1);
@@ -303,6 +409,7 @@ function App() {
         setDirection(-1);
       } else {
         setMotorSpeed(0);
+        setDirection(0); // brake
       }
     } else {
       if (gamepadConnected) setGamepadConnected(false);
@@ -360,6 +467,68 @@ function App() {
     };
   }, []);
 
+  // ============ ACCELEROMETER MODE ============
+  const requestAccelPermission = useCallback(async () => {
+    // Check if DeviceOrientationEvent exists
+    if (!window.DeviceOrientationEvent) {
+      setAccelSupported(false);
+      log('⚠️ Accelerometer not supported');
+      return;
+    }
+    
+    // iOS 13+ requires permission
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission === 'granted') {
+          setAccelEnabled(true);
+          log('✅ Accelerometer enabled (iOS)');
+        } else {
+          log('❌ Accelerometer permission denied');
+        }
+      } catch (err) {
+        log('❌ ' + err.message);
+      }
+    } else {
+      // Android and other devices
+      setAccelEnabled(true);
+      log('✅ Accelerometer enabled');
+    }
+  }, [log]);
+
+  // Handle device orientation for accelerometer mode
+  useEffect(() => {
+    if (controlMode !== 'accel' || !accelEnabled) return;
+    
+    const handleOrientation = (event) => {
+      // gamma: left-right tilt in portrait mode (-90 to 90)
+      const gamma = event.gamma || 0;
+      
+      // Smooth the value
+      const smoothingFactor = 0.15;
+      smoothedAccelRef.current += (gamma - smoothedAccelRef.current) * smoothingFactor;
+      
+      // Map gamma (-45 to 45) to steering (-90 to 90)
+      const clampedGamma = Math.max(-45, Math.min(45, smoothedAccelRef.current));
+      const steerValue = Math.round((clampedGamma / 45) * 90);
+      
+      setSteering(steerValue);
+    };
+    
+    window.addEventListener('deviceorientation', handleOrientation);
+    
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
+  }, [controlMode, accelEnabled]);
+
+  // Reset accelerometer when leaving accel mode
+  useEffect(() => {
+    if (controlMode !== 'accel') {
+      smoothedAccelRef.current = 0;
+    }
+  }, [controlMode]);
+
   const steeringDisplay = steering > 0 ? `+${steering}` : steering.toString();
 
   // ============ SELECTION SCREEN ============
@@ -374,11 +543,199 @@ function App() {
             <span className="select-text">TOUCH BUTTONS</span>
             <span className="select-desc">Use on-screen arrows</span>
           </button>
+          <button className="select-btn joystick" onClick={() => setControlMode('joystick')}>
+            <span className="select-icon">🕹️</span>
+            <span className="select-text">VIRTUAL JOYSTICK</span>
+            <span className="select-desc">Drag to steer & throttle</span>
+          </button>
+          <button className="select-btn accel" onClick={() => setControlMode('accel')}>
+            <span className="select-icon">📐</span>
+            <span className="select-text">ACCELEROMETER</span>
+            <span className="select-desc">Tilt phone to steer (portrait)</span>
+          </button>
           <button className="select-btn controller" onClick={() => setControlMode('controller')}>
             <span className="select-icon">🎮</span>
             <span className="select-text">PS5 CONTROLLER</span>
             <span className="select-desc">Stick + R2 fwd / L2 rev</span>
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ JOYSTICK MODE UI ============
+  if (controlMode === 'joystick') {
+    return (
+      <div className="controller joystick-mode">
+        <div className="header">
+          <button className="back-btn" onClick={() => setControlMode(null)}>← Back</button>
+          <span className="title">🕹️ JOYSTICK</span>
+          <button 
+            className={`connect-btn ${isConnected ? 'connected' : ''}`}
+            onClick={isConnected ? disconnect : connect}
+          >
+            {isConnected ? '● ON' : '○ OFF'}
+          </button>
+        </div>
+
+        <div className="joystick-area-combined">
+          {/* Stats Panel (Left) */}
+          <div className="joy-stats-panel">
+            <div className="joy-stat-big">
+              <span className="joy-label">STEERING</span>
+              <span className="joy-num steer">{steeringDisplay}</span>
+            </div>
+            <div className="joy-stat-big">
+              <span className="joy-label">{direction === 1 ? 'FORWARD' : direction === -1 ? 'REVERSE' : 'STOPPED'}</span>
+              <span className={`joy-num speed ${direction === -1 ? 'reverse' : direction === 0 ? 'stopped' : ''}`}>{motorSpeed}%</span>
+            </div>
+          </div>
+
+          {/* Big Combined Joystick */}
+          <div className="joystick-container-big">
+            <div 
+              className="joystick-base-big"
+              ref={joystickBaseRef}
+              onTouchStart={handleJoystickStart}
+              onMouseDown={handleJoystickStart}
+            >
+              <div className="joystick-crosshair"></div>
+              <div className="joystick-guides-big">
+                <span className="guide-label top">FWD</span>
+                <span className="guide-label bottom">REV</span>
+                <span className="guide-label left">L</span>
+                <span className="guide-label right">R</span>
+              </div>
+              <div className="joystick-knob-big" ref={joystickKnobRef}></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="steering-bar">
+          <span className="bar-label">-90</span>
+          <div className="bar-track">
+            <div className="steering-indicator" style={{ left: `${((steering + 90) / 180) * 100}%` }}></div>
+          </div>
+          <span className="bar-label">+90</span>
+        </div>
+
+        <div className="terminal">
+          {logs.slice(-3).map(l => (
+            <div key={l.id} className={l.type}>{l.message}</div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ============ ACCELEROMETER MODE UI (Portrait locked) ============
+  // Update motor speed/direction based on throttle
+  const handleAccelThrottle = (value) => {
+    const throttle = parseInt(value);
+    setAccelThrottle(throttle);
+    
+    if (throttle > 0) {
+      setMotorSpeed(throttle);
+      setDirection(1);
+    } else if (throttle < 0) {
+      setMotorSpeed(Math.abs(throttle));
+      setDirection(-1);
+    } else {
+      setMotorSpeed(0);
+      setDirection(0);
+    }
+  };
+
+  if (controlMode === 'accel') {
+    return (
+      <div className="controller accel-mode">
+        <div className="header">
+          <button className="back-btn" onClick={() => { setControlMode(null); setAccelEnabled(false); setAccelThrottle(0); }}>← Back</button>
+          <span className="title">📐 TILT</span>
+          <button 
+            className={`connect-btn ${isConnected ? 'connected' : ''}`}
+            onClick={isConnected ? disconnect : connect}
+          >
+            {isConnected ? '● ON' : '○ OFF'}
+          </button>
+        </div>
+
+        <div className="accel-area">
+          {!accelEnabled ? (
+            <div className="accel-permission">
+              {accelSupported ? (
+                <>
+                  <div className="accel-icon">📐</div>
+                  <p>Enable accelerometer to steer by tilting your phone</p>
+                  <button className="enable-accel-btn" onClick={requestAccelPermission}>
+                    ENABLE ACCELEROMETER
+                  </button>
+                  <p className="accel-hint">Hold phone upright in portrait mode</p>
+                </>
+              ) : (
+                <>
+                  <div className="accel-icon">❌</div>
+                  <p>Accelerometer not supported on this device</p>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="accel-controls">
+              {/* Steering display */}
+              <div className="accel-steering-display">
+                <div className="accel-phone-icon" style={{ transform: `rotate(${steering * 0.5}deg)` }}>
+                  📱
+                </div>
+                <div className="accel-value">{steeringDisplay}</div>
+              </div>
+
+              {/* Bidirectional Throttle Slider */}
+              <div className="accel-throttle">
+                <div className="throttle-labels">
+                  <span className="throttle-label-top">⬆ GAS</span>
+                  <span className="throttle-label-mid">0</span>
+                  <span className="throttle-label-bottom">⬇ REV</span>
+                </div>
+                <div className="throttle-slider-container">
+                  <input 
+                    type="range" 
+                    min="-100" 
+                    max="100" 
+                    value={accelThrottle}
+                    onChange={(e) => handleAccelThrottle(e.target.value)}
+                    className="throttle-slider"
+                    orient="vertical"
+                  />
+                  <div className="throttle-track-bg">
+                    <div className="throttle-center-line"></div>
+                    {accelThrottle > 0 && (
+                      <div className="throttle-fill-up" style={{ height: `${accelThrottle / 2}%` }}></div>
+                    )}
+                    {accelThrottle < 0 && (
+                      <div className="throttle-fill-down" style={{ height: `${Math.abs(accelThrottle) / 2}%` }}></div>
+                    )}
+                  </div>
+                </div>
+                <div className={`throttle-value ${accelThrottle > 0 ? 'forward' : accelThrottle < 0 ? 'reverse' : ''}`}>
+                  {accelThrottle > 0 ? `+${accelThrottle}` : accelThrottle}%
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="steering-bar">
+          <span className="bar-label">-90</span>
+          <div className="bar-track">
+            <div className="steering-indicator" style={{ left: `${((steering + 90) / 180) * 100}%` }}></div>
+          </div>
+          <span className="bar-label">+90</span>
+        </div>
+
+        <div className="terminal">
+          {logs.slice(-3).map(l => (
+            <div key={l.id} className={l.type}>{l.message}</div>
+          ))}
         </div>
       </div>
     );
@@ -414,8 +771,8 @@ function App() {
               <span className="gp-num">{steeringDisplay}</span>
             </div>
             <div className="gp-value">
-              <span className="gp-label">{direction === 1 ? 'FWD (R2)' : 'REV (L2)'}</span>
-              <span className={`gp-num speed ${direction === -1 ? 'reverse' : ''}`}>{motorSpeed}%</span>
+              <span className="gp-label">{direction === 1 ? 'FWD (R2)' : direction === -1 ? 'REV (L2)' : 'BRAKE'}</span>
+              <span className={`gp-num speed ${direction === -1 ? 'reverse' : direction === 0 ? 'brake' : ''}`}>{motorSpeed}%</span>
             </div>
           </div>
           

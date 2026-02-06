@@ -466,7 +466,27 @@ body {
 }
 
 .select-btn.buttons .select-text { color: #0cf; }
+.select-btn.joystick .select-text { color: #0f0; }
+.select-btn.accel .select-text { color: #f0f; }
 .select-btn.controller .select-text { color: #f80; }
+
+.select-btn.accel {
+  border-color: #f0f;
+}
+
+.select-btn.accel:hover {
+  background: rgba(255, 0, 255, 0.1);
+  box-shadow: 0 0 30px rgba(255, 0, 255, 0.3);
+}
+
+.select-btn.joystick {
+  border-color: #0f0;
+}
+
+.select-btn.joystick:hover {
+  background: rgba(0, 255, 0, 0.1);
+  box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+}
 
 .select-desc {
   font-size: 0.7rem;
@@ -583,4 +603,462 @@ body {
 
 .gamepad-mode .terminal {
   max-height: 60px;
+}
+
+/* ============================================
+   VIRTUAL JOYSTICK MODE (Combined Big Joystick)
+   ============================================ */
+.joystick-mode {
+  background: linear-gradient(135deg, #0a0a0f 0%, #0f1a0f 100%);
+}
+
+.joystick-area-combined {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  gap: 30px;
+  min-height: 0;
+}
+
+/* Stats Panel */
+.joy-stats-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 100px;
+}
+
+.joy-stat-big {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.joy-label {
+  font-size: 0.65rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.joy-num {
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.joy-num.steer {
+  color: #0ff;
+}
+
+.joy-num.speed {
+  color: #0f0;
+}
+
+.joy-num.speed.reverse {
+  color: #f0f;
+}
+
+.joy-num.speed.stopped {
+  color: #666;
+}
+
+/* Big Combined Joystick */
+.joystick-container-big {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.joystick-base-big {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1a1a2f 0%, #0a0a15 100%);
+  border: 4px solid;
+  border-image: linear-gradient(135deg, #0ff, #0f0, #f80) 1;
+  border-radius: 50%;
+  border-color: #0f0;
+  position: relative;
+  touch-action: none;
+  box-shadow: 
+    0 0 40px rgba(0, 255, 0, 0.3),
+    0 0 60px rgba(0, 255, 255, 0.1),
+    inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+
+.joystick-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 80%;
+  pointer-events: none;
+}
+
+.joystick-crosshair::before,
+.joystick-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.joystick-crosshair::before {
+  /* Vertical line */
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.joystick-crosshair::after {
+  /* Horizontal line */
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.joystick-guides-big {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.joystick-guides-big .guide-label {
+  position: absolute;
+  font-size: 0.7rem;
+  color: #555;
+  font-weight: 700;
+}
+
+.joystick-guides-big .guide-label.left { left: 12px; top: 50%; transform: translateY(-50%); color: #0ff; }
+.joystick-guides-big .guide-label.right { right: 12px; top: 50%; transform: translateY(-50%); color: #0ff; }
+.joystick-guides-big .guide-label.top { top: 12px; left: 50%; transform: translateX(-50%); color: #0f0; }
+.joystick-guides-big .guide-label.bottom { bottom: 12px; left: 50%; transform: translateX(-50%); color: #f0f; }
+
+.joystick-knob-big {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0ff, #0f0);
+  box-shadow: 
+    0 6px 25px rgba(0, 255, 255, 0.5),
+    0 0 30px rgba(0, 255, 0, 0.3),
+    inset 0 3px 15px rgba(255, 255, 255, 0.3);
+  cursor: grab;
+}
+
+.joystick-knob-big:active {
+  cursor: grabbing;
+  box-shadow: 
+    0 8px 35px rgba(0, 255, 255, 0.7),
+    0 0 40px rgba(0, 255, 0, 0.5),
+    inset 0 3px 15px rgba(255, 255, 255, 0.3);
+}
+
+/* Responsive big joystick */
+@media (max-height: 400px) {
+  .joystick-base-big {
+    width: 140px;
+    height: 140px;
+  }
+  
+  .joystick-knob-big {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .joy-num {
+    font-size: 1.5rem;
+  }
+  
+  .joy-stats-panel {
+    gap: 10px;
+    min-width: 80px;
+  }
+}
+
+@media (max-width: 400px) {
+  .joystick-area-combined {
+    gap: 15px;
+    padding: 10px;
+  }
+  
+  .joystick-base-big {
+    width: 130px;
+    height: 130px;
+  }
+  
+  .joystick-knob-big {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .joy-stats-panel {
+    min-width: 70px;
+  }
+  
+  .joy-num {
+    font-size: 1.3rem;
+  }
+}
+
+/* ============================================
+   ACCELEROMETER MODE (Portrait / Vertical locked)
+   ============================================ */
+
+/* Override landscape lock ONLY for accel mode */
+.accel-mode {
+  background: linear-gradient(135deg, #0a0a0f 0%, #1a0a1a 100%);
+}
+
+/* Force portrait for accel mode - undo the landscape transform */
+@media (orientation: portrait) {
+  .accel-mode {
+    transform: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+  }
+  
+  /* Also reset the html transform when in accel mode */
+  html:has(.accel-mode) {
+    transform: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+  }
+}
+
+.accel-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+.accel-permission {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  text-align: center;
+  padding: 20px;
+}
+
+.accel-icon {
+  font-size: 4rem;
+}
+
+.accel-permission p {
+  color: #888;
+  font-size: 0.9rem;
+  max-width: 280px;
+}
+
+.enable-accel-btn {
+  padding: 15px 30px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f0f, #a0a);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(255, 0, 255, 0.4);
+}
+
+.enable-accel-btn:active {
+  transform: scale(0.95);
+}
+
+.accel-hint {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+/* Steering display */
+.accel-steering-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.accel-phone-icon {
+  font-size: 5rem;
+  transition: transform 0.1s ease-out;
+}
+
+.accel-value {
+  font-size: 3rem;
+  font-weight: 900;
+  color: #f0f;
+}
+
+/* Accel Controls Layout */
+.accel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  flex: 1;
+  width: 100%;
+  padding: 10px;
+}
+
+/* Bidirectional Throttle Slider */
+.accel-throttle {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  height: 100%;
+  max-height: 300px;
+}
+
+.throttle-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  min-height: 200px;
+}
+
+.throttle-label-top {
+  color: #0f0;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.throttle-label-mid {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.throttle-label-bottom {
+  color: #f0f;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.throttle-slider-container {
+  position: relative;
+  width: 60px;
+  height: 100%;
+  min-height: 200px;
+}
+
+.throttle-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 100%;
+  height: 100%;
+  -webkit-appearance: none;
+  background: transparent;
+  position: absolute;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.throttle-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 55px;
+  height: 30px;
+  background: linear-gradient(135deg, #fff, #ccc);
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+  border: 2px solid #888;
+}
+
+.throttle-slider::-moz-range-thumb {
+  width: 55px;
+  height: 30px;
+  background: linear-gradient(135deg, #fff, #ccc);
+  border-radius: 8px;
+  border: 2px solid #888;
+}
+
+.throttle-track-bg {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  transform: translateX(-50%);
+  background: #151520;
+  border-radius: 15px;
+  border: 2px solid #333;
+  overflow: hidden;
+}
+
+.throttle-center-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  background: #666;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.throttle-fill-up {
+  position: absolute;
+  bottom: 50%;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, #0a0, #0f0);
+  border-radius: 0 0 0 0;
+}
+
+.throttle-fill-down {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to bottom, #a0a, #f0f);
+}
+
+.throttle-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #666;
+  min-width: 70px;
+  text-align: center;
+}
+
+.throttle-value.forward {
+  color: #0f0;
+}
+
+.throttle-value.reverse {
+  color: #f0f;
+}
+
+.accel-mode .steering-bar {
+  margin-top: auto;
+}
+
+.accel-mode .terminal {
+  max-height: 50px;
 }
